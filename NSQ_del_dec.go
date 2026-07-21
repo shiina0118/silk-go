@@ -252,37 +252,43 @@ func noise_shape_quantizer_del_dec(
 		n_LF_Q10, r_Q10, rr_Q20, rd1_Q10, rd2_Q10, RDmin_Q10, RDmax_Q10 int32
 		q1_Q10, q2_Q10, dither, exc_Q10, LPC_exc_Q10, xq_Q10            int32
 		tmp1, tmp2, sLF_AR_shp_Q10                                      int32
-		pred_lag_ptr, shp_lag_ptr, psLPC_Q14                            *slice[int32]
+		predLagIndex, shapeLagIndex, lpcIndex                           int
 		psSampleState                                                   [MAX_DEL_DEC_STATES][2]NSQ_sample_struct
 		psDD                                                            *NSQ_del_dec_struct
 		psSS                                                            []NSQ_sample_struct
-		a_Q12_tmp                                                       = alloc[int32](MAX_LPC_ORDER / 2)
+		a_Q12_tmp                                                       [MAX_LPC_ORDER / 2]int32
 		Atmp                                                            int32
 	)
 
-	a_Q12.copy(slice2[int16](a_Q12_tmp), int(predictLPCOrder))
+	aCoefficients := a_Q12.From()
+	for coefficientIndex := 0; coefficientIndex < int(predictLPCOrder); coefficientIndex += 2 {
+		a_Q12_tmp[coefficientIndex/2] = int32(uint16(aCoefficients[coefficientIndex])) |
+			int32(aCoefficients[coefficientIndex+1])<<16
+	}
 
-	shp_lag_ptr = NSQ.sLTP_shp_Q10.off(int(NSQ.sLTP_shp_buf_idx - lag + HARM_SHAPE_FIR_TAPS/2))
-	pred_lag_ptr = sLTP_Q16.off(int(NSQ.sLTP_buf_idx - lag + LTP_ORDER/2))
+	shapeHistory := NSQ.sLTP_shp_Q10.arr
+	shapeLagIndex = NSQ.sLTP_shp_Q10.offset + int(NSQ.sLTP_shp_buf_idx-lag+HARM_SHAPE_FIR_TAPS/2)
+	predictionHistory := sLTP_Q16.arr
+	predLagIndex = sLTP_Q16.offset + int(NSQ.sLTP_buf_idx-lag+LTP_ORDER/2)
 
 	for i = 0; i < length; i++ {
 
 		if sigtype == SIG_TYPE_VOICED {
-			LTP_pred_Q14 = SMULWB(pred_lag_ptr.idx(0), int32(b_Q14.idx(0)))
-			LTP_pred_Q14 = SMLAWB(LTP_pred_Q14, pred_lag_ptr.idx(-1), int32(b_Q14.idx(1)))
-			LTP_pred_Q14 = SMLAWB(LTP_pred_Q14, pred_lag_ptr.idx(-2), int32(b_Q14.idx(2)))
-			LTP_pred_Q14 = SMLAWB(LTP_pred_Q14, pred_lag_ptr.idx(-3), int32(b_Q14.idx(3)))
-			LTP_pred_Q14 = SMLAWB(LTP_pred_Q14, pred_lag_ptr.idx(-4), int32(b_Q14.idx(4)))
-			pred_lag_ptr = pred_lag_ptr.off(1)
+			LTP_pred_Q14 = SMULWB(predictionHistory[predLagIndex], int32(b_Q14.idx(0)))
+			LTP_pred_Q14 = SMLAWB(LTP_pred_Q14, predictionHistory[predLagIndex-1], int32(b_Q14.idx(1)))
+			LTP_pred_Q14 = SMLAWB(LTP_pred_Q14, predictionHistory[predLagIndex-2], int32(b_Q14.idx(2)))
+			LTP_pred_Q14 = SMLAWB(LTP_pred_Q14, predictionHistory[predLagIndex-3], int32(b_Q14.idx(3)))
+			LTP_pred_Q14 = SMLAWB(LTP_pred_Q14, predictionHistory[predLagIndex-4], int32(b_Q14.idx(4)))
+			predLagIndex++
 		} else {
 			LTP_pred_Q14 = 0
 		}
 
 		if lag > 0 {
-			n_LTP_Q14 = SMULWB(ADD32(shp_lag_ptr.idx(0), shp_lag_ptr.idx(-2)), HarmShapeFIRPacked_Q14)
-			n_LTP_Q14 = SMLAWT(n_LTP_Q14, shp_lag_ptr.idx(-1), HarmShapeFIRPacked_Q14)
+			n_LTP_Q14 = SMULWB(ADD32(shapeHistory[shapeLagIndex], shapeHistory[shapeLagIndex-2]), HarmShapeFIRPacked_Q14)
+			n_LTP_Q14 = SMLAWT(n_LTP_Q14, shapeHistory[shapeLagIndex-1], HarmShapeFIRPacked_Q14)
 			n_LTP_Q14 = LSHIFT(n_LTP_Q14, 6)
-			shp_lag_ptr = shp_lag_ptr.off(1)
+			shapeLagIndex++
 		} else {
 			n_LTP_Q14 = 0
 		}
@@ -296,30 +302,31 @@ func noise_shape_quantizer_del_dec(
 
 			dither = RSHIFT(psDD.Seed, 31)
 
-			psLPC_Q14 = psDD.sLPC_Q14.off(int(NSQ_LPC_BUF_LENGTH - 1 + i))
+			lpcHistory := psDD.sLPC_Q14.arr
+			lpcIndex = psDD.sLPC_Q14.offset + int(NSQ_LPC_BUF_LENGTH-1+i)
 
-			Atmp = a_Q12_tmp.idx(0)
-			LPC_pred_Q10 = SMULWB(psLPC_Q14.idx(0), Atmp)
-			LPC_pred_Q10 = SMLAWT(LPC_pred_Q10, psLPC_Q14.idx(-1), Atmp)
-			Atmp = a_Q12_tmp.idx(1)
-			LPC_pred_Q10 = SMLAWB(LPC_pred_Q10, psLPC_Q14.idx(-2), Atmp)
-			LPC_pred_Q10 = SMLAWT(LPC_pred_Q10, psLPC_Q14.idx(-3), Atmp)
-			Atmp = a_Q12_tmp.idx(2)
-			LPC_pred_Q10 = SMLAWB(LPC_pred_Q10, psLPC_Q14.idx(-4), Atmp)
-			LPC_pred_Q10 = SMLAWT(LPC_pred_Q10, psLPC_Q14.idx(-5), Atmp)
-			Atmp = a_Q12_tmp.idx(3)
-			LPC_pred_Q10 = SMLAWB(LPC_pred_Q10, psLPC_Q14.idx(-6), Atmp)
-			LPC_pred_Q10 = SMLAWT(LPC_pred_Q10, psLPC_Q14.idx(-7), Atmp)
-			Atmp = a_Q12_tmp.idx(4)
-			LPC_pred_Q10 = SMLAWB(LPC_pred_Q10, psLPC_Q14.idx(-8), Atmp)
-			LPC_pred_Q10 = SMLAWT(LPC_pred_Q10, psLPC_Q14.idx(-9), Atmp)
+			Atmp = a_Q12_tmp[0]
+			LPC_pred_Q10 = SMULWB(lpcHistory[lpcIndex], Atmp)
+			LPC_pred_Q10 = SMLAWT(LPC_pred_Q10, lpcHistory[lpcIndex-1], Atmp)
+			Atmp = a_Q12_tmp[1]
+			LPC_pred_Q10 = SMLAWB(LPC_pred_Q10, lpcHistory[lpcIndex-2], Atmp)
+			LPC_pred_Q10 = SMLAWT(LPC_pred_Q10, lpcHistory[lpcIndex-3], Atmp)
+			Atmp = a_Q12_tmp[2]
+			LPC_pred_Q10 = SMLAWB(LPC_pred_Q10, lpcHistory[lpcIndex-4], Atmp)
+			LPC_pred_Q10 = SMLAWT(LPC_pred_Q10, lpcHistory[lpcIndex-5], Atmp)
+			Atmp = a_Q12_tmp[3]
+			LPC_pred_Q10 = SMLAWB(LPC_pred_Q10, lpcHistory[lpcIndex-6], Atmp)
+			LPC_pred_Q10 = SMLAWT(LPC_pred_Q10, lpcHistory[lpcIndex-7], Atmp)
+			Atmp = a_Q12_tmp[4]
+			LPC_pred_Q10 = SMLAWB(LPC_pred_Q10, lpcHistory[lpcIndex-8], Atmp)
+			LPC_pred_Q10 = SMLAWT(LPC_pred_Q10, lpcHistory[lpcIndex-9], Atmp)
 			for j = 10; j < predictLPCOrder; j += 2 {
-				Atmp = a_Q12_tmp.idx(int(j >> 1))
-				LPC_pred_Q10 = SMLAWB(LPC_pred_Q10, psLPC_Q14.idx(int(-j)), Atmp)
-				LPC_pred_Q10 = SMLAWT(LPC_pred_Q10, psLPC_Q14.idx(int(-j-1)), Atmp)
+				Atmp = a_Q12_tmp[j>>1]
+				LPC_pred_Q10 = SMLAWB(LPC_pred_Q10, lpcHistory[lpcIndex-int(j)], Atmp)
+				LPC_pred_Q10 = SMLAWT(LPC_pred_Q10, lpcHistory[lpcIndex-int(j)-1], Atmp)
 			}
 
-			tmp2 = SMLAWB(psLPC_Q14.idx(0), psDD.sAR2_Q14.idx(0), warping_Q16)
+			tmp2 = SMLAWB(lpcHistory[lpcIndex], psDD.sAR2_Q14.idx(0), warping_Q16)
 			tmp1 = SMLAWB(psDD.sAR2_Q14.idx(0), psDD.sAR2_Q14.idx(1)-tmp2, warping_Q16)
 			*psDD.sAR2_Q14.ptr(0) = tmp2
 			n_AR_Q10 = SMULWB(tmp2, int32(AR_shp_Q13.idx(0)))
@@ -562,7 +569,10 @@ func copy_del_dec_state(DD_dst *NSQ_del_dec_struct, DD_src *NSQ_del_dec_struct, 
 	DD_src.Shape_Q10.copy(DD_dst.Shape_Q10, DECISION_DELAY)
 	DD_src.Xq_Q10.copy(DD_dst.Xq_Q10, DECISION_DELAY)
 	DD_src.sAR2_Q14.copy(DD_dst.sAR2_Q14, MAX_SHAPE_LPC_ORDER)
-	DD_src.sLPC_Q14.off(int(LPC_state_idx)).copy(DD_dst.sLPC_Q14.off(int(LPC_state_idx)), NSQ_LPC_BUF_LENGTH)
+	sourceOffset := DD_src.sLPC_Q14.offset + int(LPC_state_idx)
+	destinationOffset := DD_dst.sLPC_Q14.offset + int(LPC_state_idx)
+	copy(DD_dst.sLPC_Q14.arr[destinationOffset:destinationOffset+NSQ_LPC_BUF_LENGTH],
+		DD_src.sLPC_Q14.arr[sourceOffset:sourceOffset+NSQ_LPC_BUF_LENGTH])
 
 	DD_dst.LF_AR_Q12 = DD_src.LF_AR_Q12
 	DD_dst.Seed = DD_src.Seed

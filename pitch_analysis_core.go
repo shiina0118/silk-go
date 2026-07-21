@@ -23,7 +23,6 @@ func pitch_analysis_core(signal *slice[int16], pitch_out *slice[int32],
 		filt_state                                                                             = alloc[int32](PITCH_EST_MAX_DECIMATE_STATE_LENGTH)
 		i, k, d, j                                                                             int32
 		C                                                                                      [PITCH_EST_NB_SUBFR]*slice[int16]
-		target_ptr, basis_ptr                                                                  *slice[int16]
 		cross_corr, normalizer, energy, shift, energy_basis, energy_target                     int32
 		d_srch                                                                                 = alloc[int32](PITCH_EST_D_SRCH_LENGTH)
 		d_comp                                                                                 = alloc[int16]((PITCH_EST_MAX_LAG >> 1) + 5)
@@ -90,33 +89,33 @@ func pitch_analysis_core(signal *slice[int16], pitch_out *slice[int32],
 		}
 	}
 
-	target_ptr = signal_4kHz.off(int(RSHIFT(frame_length_4kHz, 1)))
+	signal4 := signal_4kHz.arr
+	targetOffset := signal_4kHz.offset + int(RSHIFT(frame_length_4kHz, 1))
 	for k = 0; k < 2; k++ {
-
-		basis_ptr = target_ptr.off(int(-min_lag_4kHz))
+		basisOffset := targetOffset - int(min_lag_4kHz)
 
 		normalizer = 0
 		cross_corr = 0
-		cross_corr = inner_prod_aligned(target_ptr, basis_ptr, sf_length_8kHz)
-		normalizer = inner_prod_aligned(basis_ptr, basis_ptr, sf_length_8kHz)
+		cross_corr = innerProdAlignedAt(signal4, targetOffset, signal4, basisOffset, sf_length_8kHz)
+		normalizer = innerProdAlignedAt(signal4, basisOffset, signal4, basisOffset, sf_length_8kHz)
 		normalizer = ADD_SAT32(normalizer, SMULBB(sf_length_8kHz, 4000))
 
 		temp32 = DIV32(cross_corr, SQRT_APPROX(normalizer)+1)
 		*C[k].ptr(int(min_lag_4kHz)) = int16(SAT16(temp32))
 
 		for d = min_lag_4kHz + 1; d <= max_lag_4kHz; d++ {
-			basis_ptr = basis_ptr.off(-1)
+			basisOffset--
 
-			cross_corr = inner_prod_aligned(target_ptr, basis_ptr, sf_length_8kHz)
+			cross_corr = innerProdAlignedAt(signal4, targetOffset, signal4, basisOffset, sf_length_8kHz)
 
 			normalizer +=
-				SMULBB(int32(basis_ptr.idx(0)), int32(basis_ptr.idx(0))) -
-					SMULBB(int32(basis_ptr.idx(int(sf_length_8kHz))), int32(basis_ptr.idx(int(sf_length_8kHz))))
+				SMULBB(int32(signal4[basisOffset]), int32(signal4[basisOffset])) -
+					SMULBB(int32(signal4[basisOffset+int(sf_length_8kHz)]), int32(signal4[basisOffset+int(sf_length_8kHz)]))
 
 			temp32 = DIV32(cross_corr, SQRT_APPROX(normalizer)+1)
 			*C[k].ptr(int(d)) = int16(SAT16(temp32))
 		}
-		target_ptr = target_ptr.off(int(sf_length_8kHz))
+		targetOffset += int(sf_length_8kHz)
 	}
 
 	for i = max_lag_4kHz; i >= min_lag_4kHz; i-- {
@@ -129,8 +128,8 @@ func pitch_analysis_core(signal *slice[int16], pitch_out *slice[int32],
 	length_d_srch = 4 + 2*complexity
 	insertion_sort_decreasing_int16(C[0].off(int(min_lag_4kHz)), d_srch, max_lag_4kHz-min_lag_4kHz+1, length_d_srch)
 
-	target_ptr = signal_4kHz.off(int(RSHIFT(frame_length_4kHz, 1)))
-	energy = inner_prod_aligned(target_ptr, target_ptr, RSHIFT(frame_length_4kHz, 1))
+	targetOffset = signal_4kHz.offset + int(RSHIFT(frame_length_4kHz, 1))
+	energy = innerProdAlignedAt(signal4, targetOffset, signal4, targetOffset, RSHIFT(frame_length_4kHz, 1))
 	energy = ADD_POS_SAT32(energy, 1000)
 	Cmax = int32(C[0].idx(int(min_lag_4kHz)))
 	threshold = SMULBB(Cmax, Cmax)
@@ -192,17 +191,17 @@ func pitch_analysis_core(signal *slice[int16], pitch_out *slice[int32],
 
 	resetC()
 
-	target_ptr = signal_8kHz.off(int(frame_length_4kHz))
+	signal8 := signal_8kHz.arr
+	targetOffset = signal_8kHz.offset + int(frame_length_4kHz)
 	for k = 0; k < PITCH_EST_NB_SUBFR; k++ {
-
-		energy_target = inner_prod_aligned(target_ptr, target_ptr, sf_length_8kHz)
+		energy_target = innerProdAlignedAt(signal8, targetOffset, signal8, targetOffset, sf_length_8kHz)
 
 		for j = 0; j < length_d_comp; j++ {
 			d = int32(d_comp.idx(int(j)))
-			basis_ptr = target_ptr.off(int(-d))
+			basisOffset := targetOffset - int(d)
 
-			cross_corr = inner_prod_aligned(target_ptr, basis_ptr, sf_length_8kHz)
-			energy_basis = inner_prod_aligned(basis_ptr, basis_ptr, sf_length_8kHz)
+			cross_corr = innerProdAlignedAt(signal8, targetOffset, signal8, basisOffset, sf_length_8kHz)
+			energy_basis = innerProdAlignedAt(signal8, basisOffset, signal8, basisOffset, sf_length_8kHz)
 			if cross_corr > 0 {
 				energy = max(energy_target, energy_basis)
 				lz = CLZ32(cross_corr)
@@ -218,7 +217,7 @@ func pitch_analysis_core(signal *slice[int16], pitch_out *slice[int32],
 				*C[k].ptr(int(d)) = 0
 			}
 		}
-		target_ptr = target_ptr.off(int(sf_length_8kHz))
+		targetOffset += int(sf_length_8kHz)
 	}
 
 	CCmax = math.MinInt32
@@ -397,24 +396,24 @@ func FIX_P_Ana_calc_corr_st3(
 	cross_corr_st3 *[PITCH_EST_NB_SUBFR][PITCH_EST_NB_CBKS_STAGE3_MAX][PITCH_EST_NB_STAGE3_LAGS]int32,
 	signal *slice[int16], start_lag, sf_length, complexity int32) {
 	var (
-		target_ptr, basis_ptr            *slice[int16]
 		cross_corr                       int32
 		i, j, k, lag_counter             int32
 		cbk_offset, cbk_size, delta, idx int32
-		scratch_mem                      = alloc[int32](SCRATCH_SIZE)
+		scratch_mem                      [SCRATCH_SIZE]int32
 	)
 
 	cbk_offset = int32(cbk_offsets_stage3[complexity])
 	cbk_size = int32(cbk_sizes_stage3[complexity])
 
-	target_ptr = signal.off(int(LSHIFT(sf_length, 2)))
+	samples := signal.arr
+	targetOffset := signal.offset + int(LSHIFT(sf_length, 2))
 	for k = 0; k < PITCH_EST_NB_SUBFR; k++ {
 		lag_counter = 0
 
 		for j = int32(Lag_range_stage3[complexity][k][0]); j <= int32(Lag_range_stage3[complexity][k][1]); j++ {
-			basis_ptr = target_ptr.off(int(-(start_lag + j)))
-			cross_corr = inner_prod_aligned(target_ptr.off(0), basis_ptr.off(0), sf_length)
-			*scratch_mem.ptr(int(lag_counter)) = cross_corr
+			basisOffset := targetOffset - int(start_lag+j)
+			cross_corr = innerProdAlignedAt(samples, targetOffset, samples, basisOffset, sf_length)
+			scratch_mem[lag_counter] = cross_corr
 			lag_counter++
 		}
 
@@ -422,10 +421,10 @@ func FIX_P_Ana_calc_corr_st3(
 		for i = cbk_offset; i < (cbk_offset + cbk_size); i++ {
 			idx = int32(CB_lags_stage3[k][i]) - delta
 			for j = 0; j < PITCH_EST_NB_STAGE3_LAGS; j++ {
-				cross_corr_st3[k][i][j] = scratch_mem.idx(int(idx + j))
+				cross_corr_st3[k][i][j] = scratch_mem[idx+j]
 			}
 		}
-		target_ptr = target_ptr.off(int(sf_length))
+		targetOffset += int(sf_length)
 	}
 }
 
@@ -433,7 +432,6 @@ func FIX_P_Ana_calc_energy_st3(
 	energies_st3 *[PITCH_EST_NB_SUBFR][PITCH_EST_NB_CBKS_STAGE3_MAX][PITCH_EST_NB_STAGE3_LAGS]int32,
 	signal *slice[int16], start_lag, sf_length, complexity int32) {
 	var (
-		target_ptr, basis_ptr            *slice[int16]
 		energy                           int32
 		k, i, j, lag_counter             int32
 		cbk_offset, cbk_size, delta, idx int32
@@ -443,19 +441,22 @@ func FIX_P_Ana_calc_energy_st3(
 	cbk_offset = int32(cbk_offsets_stage3[complexity])
 	cbk_size = int32(cbk_sizes_stage3[complexity])
 
-	target_ptr = signal.off(int(LSHIFT(sf_length, 2)))
+	samples := signal.arr
+	targetOffset := signal.offset + int(LSHIFT(sf_length, 2))
 	for k = 0; k < PITCH_EST_NB_SUBFR; k++ {
 		lag_counter = 0
 
-		basis_ptr = target_ptr.off(-int(start_lag + int32(Lag_range_stage3[complexity][k][0])))
-		energy = inner_prod_aligned(basis_ptr, basis_ptr, sf_length)
+		basisOffset := targetOffset - int(start_lag+int32(Lag_range_stage3[complexity][k][0]))
+		energy = innerProdAlignedAt(samples, basisOffset, samples, basisOffset, sf_length)
 		scratch_mem[lag_counter] = energy
 		lag_counter++
 
 		for i = 1; i < int32(Lag_range_stage3[complexity][k][1]-Lag_range_stage3[complexity][k][0]+1); i++ {
-			energy -= SMULBB(int32(basis_ptr.idx(int(sf_length-i))), int32(basis_ptr.idx(int(sf_length-i))))
+			trailingIndex := basisOffset + int(sf_length-i)
+			energy -= SMULBB(int32(samples[trailingIndex]), int32(samples[trailingIndex]))
 
-			energy = ADD_SAT32(energy, SMULBB(int32(basis_ptr.idx(-int(i))), int32(basis_ptr.idx(-int(i)))))
+			leadingIndex := basisOffset - int(i)
+			energy = ADD_SAT32(energy, SMULBB(int32(samples[leadingIndex]), int32(samples[leadingIndex])))
 			scratch_mem[lag_counter] = energy
 			lag_counter++
 		}
@@ -467,8 +468,16 @@ func FIX_P_Ana_calc_energy_st3(
 				energies_st3[k][i][j] = scratch_mem[idx+j]
 			}
 		}
-		target_ptr = target_ptr.off(int(sf_length))
+		targetOffset += int(sf_length)
 	}
+}
+
+func innerProdAlignedAt(first []int16, firstOffset int, second []int16, secondOffset int, length int32) int32 {
+	var sum int32
+	for index := 0; index < int(length); index++ {
+		sum = SMLABB(sum, int32(first[firstOffset+index]), int32(second[secondOffset+index]))
+	}
+	return sum
 }
 
 func FIX_P_Ana_find_scaling(signal *slice[int16], signal_length, sum_sqr_len int32) int32 {

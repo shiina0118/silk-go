@@ -16,15 +16,20 @@ func NLSF_MSVQ_encode_FIX(NLSFIndices, pNLSF_Q15 *slice[int32], psNLSF_CB *NLSF_
 		pPath_new                                                                               = alloc[int32](MAX_NLSF_MSVQ_SURVIVORS * NLSF_MSVQ_MAX_CB_STAGES)
 		pRes_Q15                                                                                = alloc[int32](MAX_NLSF_MSVQ_SURVIVORS * MAX_LPC_ORDER)
 		pRes_new_Q15                                                                            = alloc[int32](MAX_NLSF_MSVQ_SURVIVORS * MAX_LPC_ORDER)
-		pConstInt, pInt                                                                         *slice[int32]
-		pCB_element                                                                             *slice[int16]
 		pCurrentCBStage                                                                         *NLSF_CBS
 	)
+	residuals := pRes_Q15.From()
+	newResiduals := pRes_new_Q15.From()
+	paths := pPath.From()
+	newPaths := pPath_new.From()
+	rates := pRate_Q5.From()
+	newRates := pRate_new_Q5.From()
+	temporaryIndices := pTempIndices.From()
 
 	memset(pRate_Q5, 0, int(NLSF_MSVQ_Survivors))
 
 	for i = 0; i < LPC_order; i++ {
-		*pRes_Q15.ptr(int(i)) = pNLSF_Q15.idx(int(i))
+		residuals[i] = pNLSF_Q15.idx(int(i))
 	}
 
 	prev_survivors = 1
@@ -61,24 +66,25 @@ func NLSF_MSVQ_encode_FIX(NLSFIndices, pNLSF_Q15 *slice[int32], psNLSF_CB *NLSF_
 				}
 			} else {
 				input_index = 0
-				cb_index = pTempIndices.idx(int(k))
+				cb_index = temporaryIndices[k]
 			}
 
-			pConstInt = pRes_Q15.off(int(SMULBB(input_index, LPC_order)))
-			pCB_element = pCurrentCBStage.CB_NLSF_Q15.off(int(SMULBB(cb_index, LPC_order)))
-			pInt = pRes_new_Q15.off(int(SMULBB(k, LPC_order)))
+			residualOffset := input_index * LPC_order
+			codebookOffset := cb_index * LPC_order
+			newResidualOffset := k * LPC_order
+			codebook := pCurrentCBStage.CB_NLSF_Q15.From()
 			for i = 0; i < LPC_order; i++ {
-				*pInt.ptr(int(i)) = pConstInt.idx(int(i)) - int32(pCB_element.idx(int(i)))
+				newResiduals[newResidualOffset+i] = residuals[residualOffset+i] - int32(codebook[codebookOffset+i])
 			}
 
-			*pRate_new_Q5.ptr(int(k)) = pRate_Q5.idx(int(input_index)) + int32(pCurrentCBStage.Rates_Q5.idx(int(cb_index)))
+			newRates[k] = rates[input_index] + int32(pCurrentCBStage.Rates_Q5.idx(int(cb_index)))
 
-			pConstInt = pPath.off(int(SMULBB(input_index, psNLSF_CB.nStages)))
-			pInt = pPath_new.off(int(SMULBB(k, psNLSF_CB.nStages)))
+			pathOffset := input_index * psNLSF_CB.nStages
+			newPathOffset := k * psNLSF_CB.nStages
 			for i = 0; i < s; i++ {
-				*pInt.ptr(int(i)) = pConstInt.idx(int(i))
+				newPaths[newPathOffset+i] = paths[pathOffset+i]
 			}
-			*pInt.ptr(int(s)) = cb_index
+			newPaths[newPathOffset+s] = cb_index
 		}
 
 		if s < psNLSF_CB.nStages-1 {
@@ -116,7 +122,8 @@ func NLSF_MSVQ_encode_FIX(NLSFIndices, pNLSF_Q15 *slice[int32], psNLSF_CB *NLSF_
 		}
 	}
 
-	pPath_new.off(int(SMULBB(bestIndex, psNLSF_CB.nStages))).copy(NLSFIndices, int(psNLSF_CB.nStages))
+	bestPathOffset := int(bestIndex * psNLSF_CB.nStages)
+	copy(NLSFIndices.From()[:psNLSF_CB.nStages], newPaths[bestPathOffset:bestPathOffset+int(psNLSF_CB.nStages)])
 
 	NLSF_MSVQ_decode(pNLSF_Q15, psNLSF_CB, NLSFIndices, LPC_order)
 }

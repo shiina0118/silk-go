@@ -10,23 +10,27 @@ func resampler_private_down_FIR_INTERPOL0(out *slice[int16], buf2 *slice[int32],
 
 	var (
 		index_Q16, res_Q6 int32
-		buf_ptr           *slice[int32]
+		outputCount       int
 	)
+	output := out.arr
+	buffer := buf2.arr
+	coefficients := FIR_Coefs.arr
 
 	for index_Q16 = 0; index_Q16 < max_index_Q16; index_Q16 += index_increment_Q16 {
-		buf_ptr = buf2.off(int(RSHIFT(index_Q16, 16)))
+		bufferOffset := buf2.offset + int(RSHIFT(index_Q16, 16))
+		coefficientOffset := FIR_Coefs.offset
 
-		res_Q6 = SMULWB(ADD32(buf_ptr.idx(0), buf_ptr.idx(1)), int32(FIR_Coefs.idx(0)))
-		res_Q6 = SMLAWB(res_Q6, ADD32(buf_ptr.idx(1), buf_ptr.idx(10)), int32(FIR_Coefs.idx(1)))
-		res_Q6 = SMLAWB(res_Q6, ADD32(buf_ptr.idx(2), buf_ptr.idx(9)), int32(FIR_Coefs.idx(2)))
-		res_Q6 = SMLAWB(res_Q6, ADD32(buf_ptr.idx(3), buf_ptr.idx(8)), int32(FIR_Coefs.idx(3)))
-		res_Q6 = SMLAWB(res_Q6, ADD32(buf_ptr.idx(4), buf_ptr.idx(7)), int32(FIR_Coefs.idx(4)))
-		res_Q6 = SMLAWB(res_Q6, ADD32(buf_ptr.idx(5), buf_ptr.idx(6)), int32(FIR_Coefs.idx(5)))
+		res_Q6 = SMULWB(ADD32(buffer[bufferOffset], buffer[bufferOffset+1]), int32(coefficients[coefficientOffset]))
+		res_Q6 = SMLAWB(res_Q6, ADD32(buffer[bufferOffset+1], buffer[bufferOffset+10]), int32(coefficients[coefficientOffset+1]))
+		res_Q6 = SMLAWB(res_Q6, ADD32(buffer[bufferOffset+2], buffer[bufferOffset+9]), int32(coefficients[coefficientOffset+2]))
+		res_Q6 = SMLAWB(res_Q6, ADD32(buffer[bufferOffset+3], buffer[bufferOffset+8]), int32(coefficients[coefficientOffset+3]))
+		res_Q6 = SMLAWB(res_Q6, ADD32(buffer[bufferOffset+4], buffer[bufferOffset+7]), int32(coefficients[coefficientOffset+4]))
+		res_Q6 = SMLAWB(res_Q6, ADD32(buffer[bufferOffset+5], buffer[bufferOffset+6]), int32(coefficients[coefficientOffset+5]))
 
-		*out.ptr(0) = int16(SAT16(RSHIFT_ROUND(res_Q6, 6)))
-		out = out.off(1)
+		output[out.offset+outputCount] = int16(SAT16(RSHIFT_ROUND(res_Q6, 6)))
+		outputCount++
 	}
-	return out
+	return out.off(outputCount)
 }
 
 func resampler_private_down_FIR_INTERPOL1(out *slice[int16], buf2 *slice[int32],
@@ -34,37 +38,35 @@ func resampler_private_down_FIR_INTERPOL1(out *slice[int16], buf2 *slice[int32],
 
 	var (
 		index_Q16, res_Q6 int32
-		buf_ptr           *slice[int32]
 		interpol_ind      int32
-		interpol_ptr      *slice[int16]
+		outputCount       int
 	)
-
-	out = out.off(0)
+	output := out.arr
+	buffer := buf2.arr
+	coefficients := FIR_Coefs.arr
 
 	for index_Q16 = 0; index_Q16 < max_index_Q16; index_Q16 += index_increment_Q16 {
-		buf_ptr = buf2.off(int(RSHIFT(index_Q16, 16)))
-
+		bufferOffset := buf2.offset + int(RSHIFT(index_Q16, 16))
 		interpol_ind = SMULWB(index_Q16&0xFFFF, FIR_Fracs)
+		coefficientOffset := FIR_Coefs.offset + int(RESAMPLER_DOWN_ORDER_FIR/2*interpol_ind)
+		res_Q6 = SMULWB(buffer[bufferOffset], int32(coefficients[coefficientOffset]))
+		res_Q6 = SMLAWB(res_Q6, buffer[bufferOffset+1], int32(coefficients[coefficientOffset+1]))
+		res_Q6 = SMLAWB(res_Q6, buffer[bufferOffset+2], int32(coefficients[coefficientOffset+2]))
+		res_Q6 = SMLAWB(res_Q6, buffer[bufferOffset+3], int32(coefficients[coefficientOffset+3]))
+		res_Q6 = SMLAWB(res_Q6, buffer[bufferOffset+4], int32(coefficients[coefficientOffset+4]))
+		res_Q6 = SMLAWB(res_Q6, buffer[bufferOffset+5], int32(coefficients[coefficientOffset+5]))
+		coefficientOffset = FIR_Coefs.offset + int(RESAMPLER_DOWN_ORDER_FIR/2*(FIR_Fracs-1-interpol_ind))
+		res_Q6 = SMLAWB(res_Q6, buffer[bufferOffset+11], int32(coefficients[coefficientOffset]))
+		res_Q6 = SMLAWB(res_Q6, buffer[bufferOffset+10], int32(coefficients[coefficientOffset+1]))
+		res_Q6 = SMLAWB(res_Q6, buffer[bufferOffset+9], int32(coefficients[coefficientOffset+2]))
+		res_Q6 = SMLAWB(res_Q6, buffer[bufferOffset+8], int32(coefficients[coefficientOffset+3]))
+		res_Q6 = SMLAWB(res_Q6, buffer[bufferOffset+7], int32(coefficients[coefficientOffset+4]))
+		res_Q6 = SMLAWB(res_Q6, buffer[bufferOffset+6], int32(coefficients[coefficientOffset+5]))
 
-		interpol_ptr = FIR_Coefs.off(int(RESAMPLER_DOWN_ORDER_FIR / 2 * interpol_ind))
-		res_Q6 = SMULWB(buf_ptr.idx(0), int32(interpol_ptr.idx(0)))
-		res_Q6 = SMLAWB(res_Q6, buf_ptr.idx(1), int32(interpol_ptr.idx(1)))
-		res_Q6 = SMLAWB(res_Q6, buf_ptr.idx(2), int32(interpol_ptr.idx(2)))
-		res_Q6 = SMLAWB(res_Q6, buf_ptr.idx(3), int32(interpol_ptr.idx(3)))
-		res_Q6 = SMLAWB(res_Q6, buf_ptr.idx(4), int32(interpol_ptr.idx(4)))
-		res_Q6 = SMLAWB(res_Q6, buf_ptr.idx(5), int32(interpol_ptr.idx(5)))
-		interpol_ptr = FIR_Coefs.off(int(RESAMPLER_DOWN_ORDER_FIR / 2 * (FIR_Fracs - 1 - interpol_ind)))
-		res_Q6 = SMLAWB(res_Q6, buf_ptr.idx(11), int32(interpol_ptr.idx(0)))
-		res_Q6 = SMLAWB(res_Q6, buf_ptr.idx(10), int32(interpol_ptr.idx(1)))
-		res_Q6 = SMLAWB(res_Q6, buf_ptr.idx(9), int32(interpol_ptr.idx(2)))
-		res_Q6 = SMLAWB(res_Q6, buf_ptr.idx(8), int32(interpol_ptr.idx(3)))
-		res_Q6 = SMLAWB(res_Q6, buf_ptr.idx(7), int32(interpol_ptr.idx(4)))
-		res_Q6 = SMLAWB(res_Q6, buf_ptr.idx(6), int32(interpol_ptr.idx(5)))
-
-		*out.ptr(0) = int16(SAT16(RSHIFT_ROUND(res_Q6, 6)))
-		out = out.off(1)
+		output[out.offset+outputCount] = int16(SAT16(RSHIFT_ROUND(res_Q6, 6)))
+		outputCount++
 	}
-	return out
+	return out.off(outputCount)
 }
 
 func resampler_private_down_FIR(S *resampler_state_struct, out, in *slice[int16], inLen int32) {

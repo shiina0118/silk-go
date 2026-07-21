@@ -34,7 +34,7 @@ type resampler_state_struct struct {
 func (S *resampler_state_struct) init() {
 	S.sDown2 = alloc[int32](2)
 	S.sIIR = alloc[int32](RESAMPLER_MAX_IIR_ORDER)
-	S.sFIR = alloc[int32](RESAMPLER_MAX_IIR_ORDER)
+	S.sFIR = alloc[int32](RESAMPLER_MAX_FIR_ORDER)
 	S.sDownPre = alloc[int32](2)
 	S.sUpPost = alloc[int32](2)
 }
