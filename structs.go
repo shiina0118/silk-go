@@ -1,6 +1,8 @@
 package silk
 
 type nsq_state struct {
+	// Scratch is local to this quantizer and is never copied with codec state.
+	delDecWorkspace   *nsqDelDecWorkspace
 	xq                *slice[int16]
 	sLTP_shp_Q10      *slice[int32]
 	sLPC_Q14          *slice[int32]
@@ -22,7 +24,11 @@ func (n *nsq_state) init() {
 }
 
 func (n *nsq_state) copy(to *nsq_state) {
-	to.init()
+	// Copy every codec history, retaining the destination's private scratch and
+	// buffers. The self-copy case preserves the original initialization behavior.
+	if to.xq == nil || to == n {
+		to.init()
+	}
 	n.xq.copy(to.xq, 2*MAX_FRAME_LENGTH)
 	n.sLTP_shp_Q10.copy(to.sLTP_shp_Q10, 2*MAX_FRAME_LENGTH)
 	n.sLPC_Q14.copy(to.sLPC_Q14, MAX_FRAME_LENGTH/NB_SUBFR+NSQ_LPC_BUF_LENGTH)
@@ -122,14 +128,14 @@ type NLSF_CB_struct struct {
 }
 
 type encoder_state struct {
-	sRC                    *range_coder_state
-	sRC_LBRR               *range_coder_state
-	sNSQ                   *nsq_state
-	sNSQ_LBRR              *nsq_state
-	In_HP_State            [2]int32
-	sLP                    *LP_state
-	sVAD                   *VAD_state
-	LBRRprevLastGainIndex  int32
+	sRC                           *range_coder_state
+	sRC_LBRR                      *range_coder_state
+	sNSQ                          *nsq_state
+	sNSQ_LBRR                     *nsq_state
+	In_HP_State                   [2]int32
+	sLP                           *LP_state
+	sVAD                          *VAD_state
+	LBRRprevLastGainIndex         int32
 	prev_sigtype                  int32
 	typeOffsetPrev                int32
 	prevLag                       int32
@@ -160,29 +166,29 @@ type encoder_state struct {
 	NLSF_MSVQ_Survivors           int32
 	first_frame_after_reset       int32
 	controlled_since_last_payload int32
-	warping_Q16            int32
-	inputBuf               *slice[int16]
-	inputBufIx             int32
+	warping_Q16                   int32
+	inputBuf                      *slice[int16]
+	inputBufIx                    int32
 	nFramesInPayloadBuf           int32
 	nBytesInPayloadBuf            int32
-	frames_since_onset     int32
-	psNLSF_CB              [2]NLSF_CB_struct
-	LBRR_buffer            [MAX_LBRR_DELAY]LBRR_struct
-	oldest_LBRR_idx        int32
+	frames_since_onset            int32
+	psNLSF_CB                     [2]NLSF_CB_struct
+	LBRR_buffer                   [MAX_LBRR_DELAY]LBRR_struct
+	oldest_LBRR_idx               int32
 	useInBandFEC                  int32
 	LBRR_enabled                  int32
 	LBRR_GainIncreases            int32
 	bitrateDiff                   int32
 	bitrate_threshold_up          int32
-	bitrate_threshold_down int32
-	resampler_state        resampler_state_struct
-	noSpeechCounter        int32
+	bitrate_threshold_down        int32
+	resampler_state               resampler_state_struct
+	noSpeechCounter               int32
 	useDTX                        int32
 	inDTX                         int32
-	vadFlag                int32
-	sSWBdetect             detect_SWB_state
-	q                      *slice[int8]
-	q_LBRR                 *slice[int8]
+	vadFlag                       int32
+	sSWBdetect                    detect_SWB_state
+	q                             *slice[int8]
+	q_LBRR                        *slice[int8]
 }
 
 func (en *encoder_state) init() {

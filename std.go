@@ -26,7 +26,9 @@ func (s *slice[T]) ptr(offset int) *T {
 }
 
 func (s *slice[T]) idx(offset int) T {
-	return *s.ptr(offset)
+	// Indexing already checks both bounds; avoid the extra pointer indirection
+	// and duplicate checks on every sample in the fixed-point filters.
+	return s.arr[s.offset+offset]
 }
 
 func (s *slice[T]) off(offset int) *slice[T] {
@@ -56,7 +58,8 @@ func (s *slice[T]) _addr(offset int) int {
 }
 
 func slice2[U, T any](s *slice[T]) *slice[U] {
-	size := int(reflect.TypeOf((*U)(nil)).Elem().Size())
+	var element U
+	size := int(unsafe.Sizeof(element))
 
 	off := s.arr[s.offset:]
 
@@ -72,7 +75,8 @@ func slice2[U, T any](s *slice[T]) *slice[U] {
 }
 
 func alloc[T any](size int) *slice[T] {
-	eSize := int(reflect.TypeOf((*T)(nil)).Elem().Size())
+	var element T
+	eSize := int(unsafe.Sizeof(element))
 	arr := make([]T, size, size)
 	return &slice[T]{
 		arr:  arr,
@@ -85,10 +89,8 @@ func memcpy[T any](dst, src []T, size int) {
 }
 
 func mem2Slice[T any](a []T) *slice[T] {
-	s := &slice[T]{}
-	s.arr = a
-	s.size = int(reflect.TypeOf(a).Elem().Size())
-	return s
+	var element T
+	return &slice[T]{arr: a, size: int(unsafe.Sizeof(element))}
 }
 
 func matrix_ptr[T any](s *slice[T], row, column, N int32) *T {
@@ -100,8 +102,12 @@ func matrix_adr[T any](s *slice[T], row, column, N int32) *slice[T] {
 }
 
 func memset[T any](s *slice[T], v T, size int) {
-	for i := 0; i < size; i++ {
-		*s.ptr(i) = v
+	if size <= 0 {
+		return
+	}
+	data := s.arr[s.offset : s.offset+size]
+	for i := range data {
+		data[i] = v
 	}
 }
 

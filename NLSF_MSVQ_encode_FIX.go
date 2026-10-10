@@ -8,16 +8,24 @@ func NLSF_MSVQ_encode_FIX(NLSFIndices, pNLSF_Q15 *slice[int32], psNLSF_CB *NLSF_
 		i, s, k, cur_survivors, prev_survivors, min_survivors, input_index, cb_index, bestIndex int32
 		rateDistThreshold_Q18                                                                   int32
 		se_Q15, wsse_Q20, bestRateDist_Q20                                                      int32
-		pRateDist_Q18                                                                           = alloc[int32](NLSF_MSVQ_TREE_SEARCH_MAX_VECTORS_EVALUATED)
-		pRate_Q5                                                                                = alloc[int32](MAX_NLSF_MSVQ_SURVIVORS)
-		pRate_new_Q5                                                                            = alloc[int32](MAX_NLSF_MSVQ_SURVIVORS)
-		pTempIndices                                                                            = alloc[int32](MAX_NLSF_MSVQ_SURVIVORS)
-		pPath                                                                                   = alloc[int32](MAX_NLSF_MSVQ_SURVIVORS * NLSF_MSVQ_MAX_CB_STAGES)
-		pPath_new                                                                               = alloc[int32](MAX_NLSF_MSVQ_SURVIVORS * NLSF_MSVQ_MAX_CB_STAGES)
-		pRes_Q15                                                                                = alloc[int32](MAX_NLSF_MSVQ_SURVIVORS * MAX_LPC_ORDER)
-		pRes_new_Q15                                                                            = alloc[int32](MAX_NLSF_MSVQ_SURVIVORS * MAX_LPC_ORDER)
+		pRateDist_Q18Buffer                                                                     [NLSF_MSVQ_TREE_SEARCH_MAX_VECTORS_EVALUATED]int32
+		pRate_Q5Buffer                                                                          [MAX_NLSF_MSVQ_SURVIVORS]int32
+		pRate_new_Q5Buffer                                                                      [MAX_NLSF_MSVQ_SURVIVORS]int32
+		pTempIndicesBuffer                                                                      [MAX_NLSF_MSVQ_SURVIVORS]int32
+		pPathBuffer                                                                             [MAX_NLSF_MSVQ_SURVIVORS * NLSF_MSVQ_MAX_CB_STAGES]int32
+		pPath_newBuffer                                                                         [MAX_NLSF_MSVQ_SURVIVORS * NLSF_MSVQ_MAX_CB_STAGES]int32
+		pRes_Q15Buffer                                                                          [MAX_NLSF_MSVQ_SURVIVORS * MAX_LPC_ORDER]int32
+		pRes_new_Q15Buffer                                                                      [MAX_NLSF_MSVQ_SURVIVORS * MAX_LPC_ORDER]int32
 		pCurrentCBStage                                                                         *NLSF_CBS
 	)
+	pRateDist_Q18 := &slice[int32]{arr: pRateDist_Q18Buffer[:], size: 4}
+	pRate_Q5 := &slice[int32]{arr: pRate_Q5Buffer[:], size: 4}
+	pRate_new_Q5 := &slice[int32]{arr: pRate_new_Q5Buffer[:], size: 4}
+	pTempIndices := &slice[int32]{arr: pTempIndicesBuffer[:], size: 4}
+	pPath := &slice[int32]{arr: pPathBuffer[:], size: 4}
+	pPath_new := &slice[int32]{arr: pPath_newBuffer[:], size: 4}
+	pRes_Q15 := &slice[int32]{arr: pRes_Q15Buffer[:], size: 4}
+	pRes_new_Q15 := &slice[int32]{arr: pRes_new_Q15Buffer[:], size: 4}
 	residuals := pRes_Q15.From()
 	newResiduals := pRes_new_Q15.From()
 	paths := pPath.From()
@@ -25,11 +33,15 @@ func NLSF_MSVQ_encode_FIX(NLSFIndices, pNLSF_Q15 *slice[int32], psNLSF_CB *NLSF_
 	rates := pRate_Q5.From()
 	newRates := pRate_new_Q5.From()
 	temporaryIndices := pTempIndices.From()
+	rateDistortion := pRateDist_Q18.From()
+	nlsf := pNLSF_Q15.From()
+	previousNLSF := pNLSF_q_Q15_prev.From()
+	weights := pW_Q6.From()
 
 	memset(pRate_Q5, 0, int(NLSF_MSVQ_Survivors))
 
 	for i = 0; i < LPC_order; i++ {
-		residuals[i] = pNLSF_Q15.idx(int(i))
+		residuals[i] = nlsf[int(i)]
 	}
 
 	prev_survivors = 1
@@ -48,21 +60,23 @@ func NLSF_MSVQ_encode_FIX(NLSFIndices, pNLSF_Q15 *slice[int32], psNLSF_CB *NLSF_
 		insertion_sort_increasing(pRateDist_Q18, pTempIndices,
 			prev_survivors*pCurrentCBStage.nVectors, cur_survivors)
 
-		if pRateDist_Q18.idx(0) < math.MaxInt32/MAX_NLSF_MSVQ_SURVIVORS {
-			rateDistThreshold_Q18 = SMLAWB(pRateDist_Q18.idx(0),
-				MUL(NLSF_MSVQ_Survivors, pRateDist_Q18.idx(0)), FIX_CONST(NLSF_MSVQ_SURV_MAX_REL_RD, 16))
-			for pRateDist_Q18.idx(int(cur_survivors-1)) > rateDistThreshold_Q18 && cur_survivors > min_survivors {
+		if rateDistortion[0] < math.MaxInt32/MAX_NLSF_MSVQ_SURVIVORS {
+			rateDistThreshold_Q18 = SMLAWB(rateDistortion[0],
+				MUL(NLSF_MSVQ_Survivors, rateDistortion[0]), FIX_CONST(NLSF_MSVQ_SURV_MAX_REL_RD, 16))
+			for rateDistortion[int(cur_survivors-1)] > rateDistThreshold_Q18 && cur_survivors > min_survivors {
 				cur_survivors--
 			}
 		}
+		codebook := pCurrentCBStage.CB_NLSF_Q15.From()
+		codebookRates := pCurrentCBStage.Rates_Q5.From()
 		for k = 0; k < cur_survivors; k++ {
 			if s > 0 {
 				if pCurrentCBStage.nVectors == 8 {
-					input_index = RSHIFT(pTempIndices.idx(int(k)), 3)
-					cb_index = pTempIndices.idx(int(k)) & 7
+					input_index = RSHIFT(temporaryIndices[int(k)], 3)
+					cb_index = temporaryIndices[int(k)] & 7
 				} else {
-					input_index = DIV32_16(pTempIndices.idx(int(k)), int16(pCurrentCBStage.nVectors))
-					cb_index = pTempIndices.idx(int(k)) - SMULBB(input_index, pCurrentCBStage.nVectors)
+					input_index = DIV32_16(temporaryIndices[int(k)], int16(pCurrentCBStage.nVectors))
+					cb_index = temporaryIndices[int(k)] - SMULBB(input_index, pCurrentCBStage.nVectors)
 				}
 			} else {
 				input_index = 0
@@ -72,12 +86,11 @@ func NLSF_MSVQ_encode_FIX(NLSFIndices, pNLSF_Q15 *slice[int32], psNLSF_CB *NLSF_
 			residualOffset := input_index * LPC_order
 			codebookOffset := cb_index * LPC_order
 			newResidualOffset := k * LPC_order
-			codebook := pCurrentCBStage.CB_NLSF_Q15.From()
 			for i = 0; i < LPC_order; i++ {
 				newResiduals[newResidualOffset+i] = residuals[residualOffset+i] - int32(codebook[codebookOffset+i])
 			}
 
-			newRates[k] = rates[input_index] + int32(pCurrentCBStage.Rates_Q5.idx(int(cb_index)))
+			newRates[k] = rates[input_index] + int32(codebookRates[int(cb_index)])
 
 			pathOffset := input_index * psNLSF_CB.nStages
 			newPathOffset := k * psNLSF_CB.nStages
@@ -106,14 +119,14 @@ func NLSF_MSVQ_encode_FIX(NLSFIndices, pNLSF_Q15 *slice[int32], psNLSF_CB *NLSF_
 
 			wsse_Q20 = 0
 			for i = 0; i < LPC_order; i += 2 {
-				se_Q15 = pNLSF_Q15.idx(int(i)) - pNLSF_q_Q15_prev.idx(int(i))
-				wsse_Q20 = SMLAWB(wsse_Q20, SMULBB(se_Q15, se_Q15), pW_Q6.idx(int(i)))
+				se_Q15 = nlsf[int(i)] - previousNLSF[int(i)]
+				wsse_Q20 = SMLAWB(wsse_Q20, SMULBB(se_Q15, se_Q15), weights[int(i)])
 
-				se_Q15 = pNLSF_Q15.idx(int(i+1)) - pNLSF_q_Q15_prev.idx(int(i+1))
-				wsse_Q20 = SMLAWB(wsse_Q20, SMULBB(se_Q15, se_Q15), pW_Q6.idx(int(i+1)))
+				se_Q15 = nlsf[int(i+1)] - previousNLSF[int(i+1)]
+				wsse_Q20 = SMLAWB(wsse_Q20, SMULBB(se_Q15, se_Q15), weights[int(i+1)])
 			}
 
-			wsse_Q20 = ADD_POS_SAT32(pRateDist_Q18.idx(int(s)), SMULWB(wsse_Q20, NLSF_mu_fluc_red_Q16))
+			wsse_Q20 = ADD_POS_SAT32(rateDistortion[int(s)], SMULWB(wsse_Q20, NLSF_mu_fluc_red_Q16))
 
 			if wsse_Q20 < bestRateDist_Q20 {
 				bestRateDist_Q20 = wsse_Q20

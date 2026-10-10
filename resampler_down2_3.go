@@ -3,54 +3,42 @@ package silk
 const DOWN23_ORDER_FIR = 4
 
 func resampler_down2_3(S *slice[int32], out, in *slice[int16], inLen int32) {
-	var (
-		nSamplesIn, counter, res_Q6 int32
-		buf                         = alloc[int32](RESAMPLER_MAX_BATCH_SIZE_IN + DOWN23_ORDER_FIR)
-		buf_ptr                     *slice[int32]
-	)
-
-	S.copy(buf, DOWN23_ORDER_FIR)
-
-	coefs := mem2Slice[int16](Resampler_2_3_COEFS_LQ)
+	var buf [RESAMPLER_MAX_BATCH_SIZE_IN + DOWN23_ORDER_FIR]int32
+	state, input, output := S.From(), in.From(), out.From()
+	copy(buf[:DOWN23_ORDER_FIR], state[:DOWN23_ORDER_FIR])
+	coefs := Resampler_2_3_COEFS_LQ
+	inputOffset, outputOffset := 0, 0
 
 	for {
-		nSamplesIn = min(inLen, RESAMPLER_MAX_BATCH_SIZE_IN)
+		nSamplesIn := min(inLen, RESAMPLER_MAX_BATCH_SIZE_IN)
+		resamplerPrivateAR2(state[DOWN23_ORDER_FIR:], buf[DOWN23_ORDER_FIR:], input[inputOffset:], coefs, nSamplesIn)
 
-		resampler_private_AR2(S.off(DOWN23_ORDER_FIR), buf.off(DOWN23_ORDER_FIR), in,
-			coefs.off(0), nSamplesIn)
+		for bufferOffset, counter := 0, nSamplesIn; counter > 2; bufferOffset, counter = bufferOffset+3, counter-3 {
+			res_Q6 := SMULWB(buf[bufferOffset], int32(coefs[2]))
+			res_Q6 = SMLAWB(res_Q6, buf[bufferOffset+1], int32(coefs[3]))
+			res_Q6 = SMLAWB(res_Q6, buf[bufferOffset+2], int32(coefs[5]))
+			res_Q6 = SMLAWB(res_Q6, buf[bufferOffset+3], int32(coefs[4]))
 
-		buf_ptr = buf.off(0)
-		counter = nSamplesIn
-		for counter > 2 {
-			res_Q6 = SMULWB(buf_ptr.idx(0), int32(coefs.idx(2)))
-			res_Q6 = SMLAWB(res_Q6, buf_ptr.idx(1), int32(coefs.idx(3)))
-			res_Q6 = SMLAWB(res_Q6, buf_ptr.idx(2), int32(coefs.idx(5)))
-			res_Q6 = SMLAWB(res_Q6, buf_ptr.idx(3), int32(coefs.idx(4)))
+			output[outputOffset] = int16(SAT16(RSHIFT_ROUND(res_Q6, 6)))
+			outputOffset++
 
-			*out.ptr(0) = int16(SAT16(RSHIFT_ROUND(res_Q6, 6)))
-			out = out.off(1)
+			res_Q6 = SMULWB(buf[bufferOffset+1], int32(coefs[4]))
+			res_Q6 = SMLAWB(res_Q6, buf[bufferOffset+2], int32(coefs[5]))
+			res_Q6 = SMLAWB(res_Q6, buf[bufferOffset+3], int32(coefs[3]))
+			res_Q6 = SMLAWB(res_Q6, buf[bufferOffset+4], int32(coefs[2]))
 
-			res_Q6 = SMULWB(buf_ptr.idx(1), int32(coefs.idx(4)))
-			res_Q6 = SMLAWB(res_Q6, buf_ptr.idx(2), int32(coefs.idx(5)))
-			res_Q6 = SMLAWB(res_Q6, buf_ptr.idx(3), int32(coefs.idx(3)))
-			res_Q6 = SMLAWB(res_Q6, buf_ptr.idx(4), int32(coefs.idx(2)))
-
-			*out.ptr(0) = int16(SAT16(RSHIFT_ROUND(res_Q6, 6)))
-			out = out.off(1)
-
-			buf_ptr = buf_ptr.off(3)
-			counter -= 3
+			output[outputOffset] = int16(SAT16(RSHIFT_ROUND(res_Q6, 6)))
+			outputOffset++
 		}
 
-		in = in.off(int(nSamplesIn))
+		inputOffset += int(nSamplesIn)
 		inLen -= nSamplesIn
 
 		if inLen > 0 {
-			buf.off(int(nSamplesIn)).copy(buf, DOWN23_ORDER_FIR)
+			copy(buf[:DOWN23_ORDER_FIR], buf[int(nSamplesIn):int(nSamplesIn)+DOWN23_ORDER_FIR])
 		} else {
+			copy(state[:DOWN23_ORDER_FIR], buf[int(nSamplesIn):int(nSamplesIn)+DOWN23_ORDER_FIR])
 			break
 		}
 	}
-
-	buf.off(int(nSamplesIn)).copy(S, DOWN23_ORDER_FIR)
 }

@@ -3,14 +3,17 @@ package silk
 func process_NLSFs_FIX(psEnc *encoder_state_FIX, psEncCtrl *encoder_control_FIX, pNLSF_Q15 *slice[int32]) {
 	var (
 		doInterpolate                     bool
-		pNLSFW_Q6                         = alloc[int32](MAX_LPC_ORDER)
+		pNLSFW_Q6Buffer                   [MAX_LPC_ORDER]int32
 		NLSF_mu_Q15, NLSF_mu_fluc_red_Q16 int32
 		i_sqr_Q15                         int32
 		psNLSF_CB                         *NLSF_CB_struct
-		pNLSF0_temp_Q15                   = alloc[int32](MAX_LPC_ORDER)
-		pNLSFW0_temp_Q6                   = alloc[int32](MAX_LPC_ORDER)
+		pNLSF0_temp_Q15Buffer             [MAX_LPC_ORDER]int32
+		pNLSFW0_temp_Q6Buffer             [MAX_LPC_ORDER]int32
 		i                                 int32
 	)
+	pNLSFW_Q6 := &slice[int32]{arr: pNLSFW_Q6Buffer[:], size: 4}
+	pNLSF0_temp_Q15 := &slice[int32]{arr: pNLSF0_temp_Q15Buffer[:], size: 4}
+	pNLSFW0_temp_Q6 := &slice[int32]{arr: pNLSFW0_temp_Q6Buffer[:], size: 4}
 
 	if psEncCtrl.sCmn.sigtype == SIG_TYPE_VOICED {
 		NLSF_mu_Q15 = SMLAWB(66, -8388, psEnc.speech_activity_Q8)

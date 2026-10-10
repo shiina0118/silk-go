@@ -2,42 +2,44 @@ package silk
 
 func NLSF_MSVQ_decode(pNLSF_Q15 *slice[int32], psNLSF_CB *NLSF_CB_struct, NLSFIndices *slice[int32], LPC_order int32) {
 	var (
-		pCB_element *slice[int16]
+		pCB_element []int16
 		s, i        int32
 	)
 
-	pCB_element = psNLSF_CB.CBStages[0].CB_NLSF_Q15.off(int(MUL(NLSFIndices.idx(0), LPC_order)))
+	nlsf := pNLSF_Q15.From()
+	indices := NLSFIndices.From()
+	pCB_element = psNLSF_CB.CBStages[0].CB_NLSF_Q15.From()[int(MUL(indices[0], LPC_order)):]
 
 	for i = 0; i < LPC_order; i++ {
-		*pNLSF_Q15.ptr(int(i)) = int32(pCB_element.idx(int(i)))
+		nlsf[int(i)] = int32(pCB_element[int(i)])
 	}
 
 	for s = 1; s < psNLSF_CB.nStages; s++ {
 
 		if LPC_order == 16 {
-			pCB_element = psNLSF_CB.CBStages[s].CB_NLSF_Q15.off(int(LSHIFT(NLSFIndices.idx(int(s)), 4)))
+			pCB_element = psNLSF_CB.CBStages[s].CB_NLSF_Q15.From()[int(LSHIFT(indices[int(s)], 4)):]
 
-			*pNLSF_Q15.ptr(0) += int32(pCB_element.idx(0))
-			*pNLSF_Q15.ptr(1) += int32(pCB_element.idx(1))
-			*pNLSF_Q15.ptr(2) += int32(pCB_element.idx(2))
-			*pNLSF_Q15.ptr(3) += int32(pCB_element.idx(3))
-			*pNLSF_Q15.ptr(4) += int32(pCB_element.idx(4))
-			*pNLSF_Q15.ptr(5) += int32(pCB_element.idx(5))
-			*pNLSF_Q15.ptr(6) += int32(pCB_element.idx(6))
-			*pNLSF_Q15.ptr(7) += int32(pCB_element.idx(7))
-			*pNLSF_Q15.ptr(8) += int32(pCB_element.idx(8))
-			*pNLSF_Q15.ptr(9) += int32(pCB_element.idx(9))
-			*pNLSF_Q15.ptr(10) += int32(pCB_element.idx(10))
-			*pNLSF_Q15.ptr(11) += int32(pCB_element.idx(11))
-			*pNLSF_Q15.ptr(12) += int32(pCB_element.idx(12))
-			*pNLSF_Q15.ptr(13) += int32(pCB_element.idx(13))
-			*pNLSF_Q15.ptr(14) += int32(pCB_element.idx(14))
-			*pNLSF_Q15.ptr(15) += int32(pCB_element.idx(15))
+			nlsf[0] += int32(pCB_element[0])
+			nlsf[1] += int32(pCB_element[1])
+			nlsf[2] += int32(pCB_element[2])
+			nlsf[3] += int32(pCB_element[3])
+			nlsf[4] += int32(pCB_element[4])
+			nlsf[5] += int32(pCB_element[5])
+			nlsf[6] += int32(pCB_element[6])
+			nlsf[7] += int32(pCB_element[7])
+			nlsf[8] += int32(pCB_element[8])
+			nlsf[9] += int32(pCB_element[9])
+			nlsf[10] += int32(pCB_element[10])
+			nlsf[11] += int32(pCB_element[11])
+			nlsf[12] += int32(pCB_element[12])
+			nlsf[13] += int32(pCB_element[13])
+			nlsf[14] += int32(pCB_element[14])
+			nlsf[15] += int32(pCB_element[15])
 		} else {
-			pCB_element = psNLSF_CB.CBStages[s].CB_NLSF_Q15.off(int(SMULBB(NLSFIndices.idx(int(s)), LPC_order)))
+			pCB_element = psNLSF_CB.CBStages[s].CB_NLSF_Q15.From()[int(SMULBB(indices[int(s)], LPC_order)):]
 
 			for i = 0; i < LPC_order; i++ {
-				*pNLSF_Q15.ptr(int(i)) += int32(pCB_element.idx(int(i)))
+				nlsf[int(i)] += int32(pCB_element[int(i)])
 			}
 		}
 	}

@@ -35,6 +35,7 @@ func (p *predict_state_FIX) init() {
 }
 
 type encoder_state_FIX struct {
+	frameWorkspace                 *encoderFrameWorkspace
 	sCmn                           *encoder_state
 	variable_HP_smth1_Q15          int32
 	variable_HP_smth2_Q15          int32

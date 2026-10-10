@@ -32,39 +32,47 @@ func decode_split(p_child1, p_child2 *int32, sRC *range_coder_state, p int32, sh
 }
 
 func shell_encoder(sRC *range_coder_state, pulses0 *slice[int32]) {
+	shellEncoder(sRC, pulses0.From())
+}
+
+func shellEncoder(sRC *range_coder_state, pulses0 []int32) {
 	var (
-		pulses1 = alloc[int32](8)
-		pulses2 = alloc[int32](4)
-		pulses3 = alloc[int32](2)
-		pulses4 = alloc[int32](1)
+		pulses1 [8]int32
+		pulses2 [4]int32
+		pulses3 [2]int32
 	)
 
-	combine_pulses(pulses1, pulses0, 8)
-	combine_pulses(pulses2, pulses1, 4)
-	combine_pulses(pulses3, pulses2, 2)
-	combine_pulses(pulses4, pulses3, 1)
+	for i := range pulses1 {
+		pulses1[i] = pulses0[2*i] + pulses0[2*i+1]
+	}
+	for i := range pulses2 {
+		pulses2[i] = pulses1[2*i] + pulses1[2*i+1]
+	}
+	for i := range pulses3 {
+		pulses3[i] = pulses2[2*i] + pulses2[2*i+1]
+	}
 
-	encode_split(sRC, pulses3.idx(0), pulses4.idx(0), shell_code_table3)
+	encode_split(sRC, pulses3[0], pulses3[0]+pulses3[1], shell_code_table3)
 
-	encode_split(sRC, pulses2.idx(0), pulses3.idx(0), shell_code_table2)
+	encode_split(sRC, pulses2[0], pulses3[0], shell_code_table2)
 
-	encode_split(sRC, pulses1.idx(0), pulses2.idx(0), shell_code_table1)
-	encode_split(sRC, pulses0.idx(0), pulses1.idx(0), shell_code_table0)
-	encode_split(sRC, pulses0.idx(2), pulses1.idx(1), shell_code_table0)
+	encode_split(sRC, pulses1[0], pulses2[0], shell_code_table1)
+	encode_split(sRC, pulses0[0], pulses1[0], shell_code_table0)
+	encode_split(sRC, pulses0[2], pulses1[1], shell_code_table0)
 
-	encode_split(sRC, pulses1.idx(2), pulses2.idx(1), shell_code_table1)
-	encode_split(sRC, pulses0.idx(4), pulses1.idx(2), shell_code_table0)
-	encode_split(sRC, pulses0.idx(6), pulses1.idx(3), shell_code_table0)
+	encode_split(sRC, pulses1[2], pulses2[1], shell_code_table1)
+	encode_split(sRC, pulses0[4], pulses1[2], shell_code_table0)
+	encode_split(sRC, pulses0[6], pulses1[3], shell_code_table0)
 
-	encode_split(sRC, pulses2.idx(2), pulses3.idx(1), shell_code_table2)
+	encode_split(sRC, pulses2[2], pulses3[1], shell_code_table2)
 
-	encode_split(sRC, pulses1.idx(4), pulses2.idx(2), shell_code_table1)
-	encode_split(sRC, pulses0.idx(8), pulses1.idx(4), shell_code_table0)
-	encode_split(sRC, pulses0.idx(10), pulses1.idx(5), shell_code_table0)
+	encode_split(sRC, pulses1[4], pulses2[2], shell_code_table1)
+	encode_split(sRC, pulses0[8], pulses1[4], shell_code_table0)
+	encode_split(sRC, pulses0[10], pulses1[5], shell_code_table0)
 
-	encode_split(sRC, pulses1.idx(6), pulses2.idx(3), shell_code_table1)
-	encode_split(sRC, pulses0.idx(12), pulses1.idx(6), shell_code_table0)
-	encode_split(sRC, pulses0.idx(14), pulses1.idx(7), shell_code_table0)
+	encode_split(sRC, pulses1[6], pulses2[3], shell_code_table1)
+	encode_split(sRC, pulses0[12], pulses1[6], shell_code_table0)
+	encode_split(sRC, pulses0[14], pulses1[7], shell_code_table0)
 }
 
 func shell_decoder(pulses0 *slice[int32], sRC *range_coder_state, pulses4 int32) {

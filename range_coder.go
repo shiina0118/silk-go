@@ -196,7 +196,12 @@ func range_decoder_multi(data *slice[int32], psRC *range_coder_state, prob [][]u
 }
 
 func range_enc_init(psRC *range_coder_state) {
-	psRC.buffer = alloc[byte](MAX_ARITHM_BYTES)
+	if psRC.buffer == nil || len(psRC.buffer.arr) != MAX_ARITHM_BYTES {
+		psRC.buffer = alloc[byte](MAX_ARITHM_BYTES)
+	} else {
+		psRC.buffer.offset = 0
+		memset(psRC.buffer, byte(0), MAX_ARITHM_BYTES)
+	}
 	psRC.bufferLength = MAX_ARITHM_BYTES
 	psRC.range_Q16 = 0x0000FFFF
 	psRC.bufferIx = 0

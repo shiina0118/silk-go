@@ -9,18 +9,24 @@ func find_LPC_FIX(
 	subfr_length int32) {
 	var (
 		k                                          int32
-		a_Q16                                      = alloc[int32](MAX_LPC_ORDER)
+		a_Q16Buffer                                [MAX_LPC_ORDER]int32
 		isInterpLower, shift                       int32
-		S                                          = alloc[int16](MAX_LPC_ORDER)
+		SBuffer                                    [MAX_LPC_ORDER]int16
 		res_nrg0, res_nrg1                         int32
 		rshift0, rshift1                           int32
-		a_tmp_Q16                                  = alloc[int32](MAX_LPC_ORDER)
+		a_tmp_Q16Buffer                            [MAX_LPC_ORDER]int32
 		res_nrg_interp, res_nrg, res_tmp_nrg       int32
 		res_nrg_interp_Q, res_nrg_Q, res_tmp_nrg_Q int32
-		a_tmp_Q12                                  = alloc[int16](MAX_LPC_ORDER)
-		NLSF0_Q15                                  = alloc[int32](MAX_LPC_ORDER)
-		LPC_res                                    = alloc[int16]((MAX_FRAME_LENGTH + NB_SUBFR*MAX_LPC_ORDER) / 2)
+		a_tmp_Q12Buffer                            [MAX_LPC_ORDER]int16
+		NLSF0_Q15Buffer                            [MAX_LPC_ORDER]int32
+		LPC_resBuffer                              [(MAX_FRAME_LENGTH + NB_SUBFR*MAX_LPC_ORDER) / 2]int16
 	)
+	a_Q16 := &slice[int32]{arr: a_Q16Buffer[:], size: 4}
+	S := &slice[int16]{arr: SBuffer[:], size: 2}
+	a_tmp_Q16 := &slice[int32]{arr: a_tmp_Q16Buffer[:], size: 4}
+	a_tmp_Q12 := &slice[int16]{arr: a_tmp_Q12Buffer[:], size: 2}
+	NLSF0_Q15 := &slice[int32]{arr: NLSF0_Q15Buffer[:], size: 4}
+	LPC_res := &slice[int16]{arr: LPC_resBuffer[:], size: 2}
 
 	*interpIndex = 4
 

@@ -6,17 +6,24 @@ import (
 
 func find_pred_coefs_FIX(psEnc *encoder_state_FIX, psEncCtrl *encoder_control_FIX, res_pitch *slice[int16]) {
 	var (
-		i                 int32
-		WLTP              = alloc[int32](NB_SUBFR * LTP_ORDER * LTP_ORDER)
-		invGains_Q16      = alloc[int32](NB_SUBFR)
-		local_gains       = alloc[int32](NB_SUBFR)
-		Wght_Q15          = alloc[int32](NB_SUBFR)
-		NLSF_Q15          = alloc[int32](MAX_LPC_ORDER)
-		x_ptr, x_pre_ptr  *slice[int16]
-		LPC_in_pre        = alloc[int16](NB_SUBFR*MAX_LPC_ORDER + MAX_FRAME_LENGTH)
-		tmp, min_gain_Q16 int32
-		LTP_corrs_rshift  = alloc[int32](NB_SUBFR)
+		i                      int32
+		WLTPBuffer             [NB_SUBFR * LTP_ORDER * LTP_ORDER]int32
+		invGains_Q16Buffer     [NB_SUBFR]int32
+		local_gainsBuffer      [NB_SUBFR]int32
+		Wght_Q15Buffer         [NB_SUBFR]int32
+		NLSF_Q15Buffer         [MAX_LPC_ORDER]int32
+		x_ptr, x_pre_ptr       *slice[int16]
+		LPC_in_preBuffer       [NB_SUBFR*MAX_LPC_ORDER + MAX_FRAME_LENGTH]int16
+		tmp, min_gain_Q16      int32
+		LTP_corrs_rshiftBuffer [NB_SUBFR]int32
 	)
+	WLTP := &slice[int32]{arr: WLTPBuffer[:], size: 4}
+	invGains_Q16 := &slice[int32]{arr: invGains_Q16Buffer[:], size: 4}
+	local_gains := &slice[int32]{arr: local_gainsBuffer[:], size: 4}
+	Wght_Q15 := &slice[int32]{arr: Wght_Q15Buffer[:], size: 4}
+	NLSF_Q15 := &slice[int32]{arr: NLSF_Q15Buffer[:], size: 4}
+	LPC_in_pre := &slice[int16]{arr: LPC_in_preBuffer[:], size: 2}
+	LTP_corrs_rshift := &slice[int32]{arr: LTP_corrs_rshiftBuffer[:], size: 4}
 
 	min_gain_Q16 = math.MaxInt32 >> 6
 	for i = 0; i < NB_SUBFR; i++ {

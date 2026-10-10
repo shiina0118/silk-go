@@ -1,18 +1,18 @@
 package silk
 
 func encode_frame_FIX(psEnc *encoder_state_FIX, pCode *slice[byte], pnBytesOut *int16, pIn *slice[int16]) int {
-	sEncCtrl := &encoder_control_FIX{}
-	sEncCtrl.init()
+	workspace := psEnc.frameScratch()
+	sEncCtrl := &workspace.control
 
 	var (
 		nBytes                                int32
 		ret                                   int
 		x_frame, res_pitch_frame              *slice[int16]
-		xfw                                   = alloc[int16](MAX_FRAME_LENGTH)
-		pIn_HP                                = alloc[int16](MAX_FRAME_LENGTH)
-		res_pitch                             = alloc[int16](2*MAX_FRAME_LENGTH + LA_PITCH_MAX)
+		xfw                                   = workspace.xfw
+		pIn_HP                                = workspace.pInHP
+		res_pitch                             = workspace.resPitch
 		LBRR_idx, frame_terminator, SNR_dB_Q7 int32
-		LBRRpayload                           = alloc[byte](MAX_ARITHM_BYTES)
+		LBRRpayload                           = workspace.lbrrPayload
 		nBytesLBRR                            int16
 	)
 
@@ -162,16 +162,17 @@ func encode_frame_FIX(psEnc *encoder_state_FIX, pCode *slice[byte], pnBytesOut *
 func LBRR_encode_FIX(psEnc *encoder_state_FIX, psEncCtrl *encoder_control_FIX, pCode *slice[byte],
 	pnBytesOut *int16, xfw *slice[int16]) {
 	var (
-		TempGainsIndices                                 = alloc[int32](NB_SUBFR)
 		frame_terminator                                 int32
 		nBytes, nFramesInPayloadBuf                      int32
-		TempGains_Q16                                    = alloc[int32](NB_SUBFR)
 		typeOffset, LTP_scaleIndex, Rate_only_parameters int32
 	)
 
 	LBRR_ctrl_FIX(psEnc, &psEncCtrl.sCmn)
 
 	if psEnc.sCmn.LBRR_enabled != 0 {
+		var gainsIndices, gainsQ16 [NB_SUBFR]int32
+		TempGainsIndices := mem2Slice(gainsIndices[:])
+		TempGains_Q16 := mem2Slice(gainsQ16[:])
 		psEncCtrl.sCmn.GainsIndices.copy(TempGainsIndices, NB_SUBFR)
 		psEncCtrl.Gains_Q16.copy(TempGains_Q16, NB_SUBFR)
 
