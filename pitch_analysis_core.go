@@ -44,9 +44,14 @@ func pitch_analysis_core(signal *slice[int16], pitch_out *slice[int32],
 		delta_lag_log2_sqr_Q7, lag_log2_Q7, prevLag_log2_Q7, prev_lag_bias_Q15, corr_thres_Q15 int32
 	)
 
+	// Correlation rows live in this frame and are zeroed like fresh allocations.
+	var CStore [PITCH_EST_NB_SUBFR][(PITCH_EST_MAX_LAG >> 1) + 5]int16
+	var CView [PITCH_EST_NB_SUBFR]slice[int16]
 	resetC := func() {
+		CStore = [PITCH_EST_NB_SUBFR][(PITCH_EST_MAX_LAG >> 1) + 5]int16{}
 		for q := 0; q < len(C); q++ {
-			C[q] = alloc[int16]((PITCH_EST_MAX_LAG >> 1) + 5)
+			CView[q] = slice[int16]{arr: CStore[q][:], size: 2}
+			C[q] = &CView[q]
 		}
 	}
 	resetC()

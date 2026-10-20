@@ -43,6 +43,22 @@ func (s *slice[T]) off(offset int) *slice[T] {
 	}
 }
 
+// offInto is off without allocating: the view is written to dst, normally a
+// caller-owned local reused across loop iterations, and dst is returned.
+// Out-of-range offsets return nil exactly as off does. s may equal dst.
+func (s *slice[T]) offInto(dst *slice[T], offset int) *slice[T] {
+	addr := s._addr(offset)
+	if addr < 0 {
+		return nil
+	}
+	*dst = slice[T]{
+		arr:    s.arr,
+		offset: addr,
+		size:   s.size,
+	}
+	return dst
+}
+
 func (s *slice[T]) copy(dest *slice[T], size int) {
 	destSlice := dest.From()
 	sSlice := s.From()

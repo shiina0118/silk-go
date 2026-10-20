@@ -103,7 +103,8 @@ func noise_shape_analysis_FIX(psEnc *encoder_state_FIX, psEncCtrl *encoder_contr
 		x_ptr, pitch_res_ptr                                                               *slice[int16]
 	)
 
-	x_ptr = x.off(-int(psEnc.sCmn.la_shape))
+	var xView, pitchResView slice[int16]
+	x_ptr = x.offInto(&xView, -int(psEnc.sCmn.la_shape))
 
 	psEncCtrl.current_SNR_dB_Q7 = psEnc.SNR_dB_Q7 - SMULWB(LSHIFT(psEnc.BufferedInChannel_ms, 7),
 		FIX_CONST(0.05, 16))
@@ -138,7 +139,7 @@ func noise_shape_analysis_FIX(psEnc *encoder_state_FIX, psEncCtrl *encoder_contr
 		nSamples = LSHIFT(psEnc.sCmn.fs_kHz, 1)
 		energy_variation_Q7 = 0
 		log_energy_prev_Q7 = 0
-		pitch_res_ptr = pitch_res.off(0)
+		pitch_res_ptr = pitch_res.offInto(&pitchResView, 0)
 		for k = 0; k < FRAME_LENGTH_MS/2; k++ {
 			sum_sqr_shift(&nrg, &scale, pitch_res_ptr, nSamples)
 			nrg += RSHIFT(nSamples, scale)
@@ -148,7 +149,7 @@ func noise_shape_analysis_FIX(psEnc *encoder_state_FIX, psEncCtrl *encoder_contr
 				energy_variation_Q7 += abs(log_energy_Q7 - log_energy_prev_Q7)
 			}
 			log_energy_prev_Q7 = log_energy_Q7
-			pitch_res_ptr = pitch_res_ptr.off(int(nSamples))
+			pitch_res_ptr = pitch_res_ptr.offInto(&pitchResView, int(nSamples))
 		}
 
 		psEncCtrl.sparseness_Q8 = RSHIFT(sigm_Q15(SMULWB(energy_variation_Q7-
@@ -190,7 +191,7 @@ func noise_shape_analysis_FIX(psEnc *encoder_state_FIX, psEncCtrl *encoder_contr
 		shift += flat_part
 		apply_sine_window(x_windowed.off(int(shift)), x_ptr.off(int(shift)), 2, slope_part)
 
-		x_ptr = x_ptr.off(int(psEnc.sCmn.subfr_length))
+		x_ptr = x_ptr.offInto(&xView, int(psEnc.sCmn.subfr_length))
 
 		if psEnc.sCmn.warping_Q16 > 0 {
 			warped_autocorrelation_FIX(auto_corr, &scale, x_windowed, int16(warping_Q16), psEnc.sCmn.shapeWinLength, psEnc.sCmn.shapingLPCOrder)

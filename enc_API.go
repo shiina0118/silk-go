@@ -86,7 +86,8 @@ func (e *Encoder) EncodePayload(in []int16, out []byte) (int, error) {
 		return 0, ErrEncodeInputInvalidNoOfSamples
 	}
 
-	samplesIn := mem2Slice(in)
+	samplesView := slice[int16]{arr: in, size: 2}
+	samplesIn := &samplesView
 
 	nBytesOut := int16(len(out))
 
@@ -111,7 +112,7 @@ func (e *Encoder) EncodePayload(in []int16, out []byte) (int, error) {
 			ret += resampler(&psEnc.sCmn.resampler_state,
 				psEnc.sCmn.inputBuf.off(int(psEnc.sCmn.inputBufIx)), samplesIn, nSamplesFromInput)
 		}
-		samplesIn = samplesIn.off(int(nSamplesFromInput))
+		samplesIn = samplesIn.offInto(&samplesView, int(nSamplesFromInput))
 		nSamplesIn -= nSamplesFromInput
 		psEnc.sCmn.inputBufIx += nSamplesToBuffer
 

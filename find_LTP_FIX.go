@@ -29,14 +29,17 @@ func find_LTP_FIX(b_Q14 *slice[int16], WLTP *slice[int32], LTPredCodGain_Q7 *int
 		wd, m_Q12                                    int32
 	)
 
+	// Subframe views reuse these locals instead of allocating on every step.
+	var rView, lagView, bView slice[int16]
+	var WLTPView slice[int32]
 	b_Q14_ptr = b_Q14
 	WLTP_ptr = WLTP
-	r_ptr = r_first.off(int(mem_offset))
+	r_ptr = r_first.offInto(&rView, int(mem_offset))
 	for k = 0; k < NB_SUBFR; k++ {
 		if k == (NB_SUBFR >> 1) {
-			r_ptr = r_last.off(int(mem_offset))
+			r_ptr = r_last.offInto(&rView, int(mem_offset))
 		}
-		lag_ptr = r_ptr.off(-int(lag.idx(int(k)) + LTP_ORDER/2))
+		lag_ptr = r_ptr.offInto(&lagView, -int(lag.idx(int(k))+LTP_ORDER/2))
 
 		sum_sqr_shift(rr.ptr(int(k)), &rr_shifts, r_ptr, subfr_length)
 
@@ -87,9 +90,9 @@ func find_LTP_FIX(b_Q14 *slice[int16], WLTP *slice[int32], LTPredCodGain_Q7 *int
 
 		*w.ptr(int(k)) = *matrix_ptr(WLTP_ptr, LTP_ORDER>>1, LTP_ORDER>>1, LTP_ORDER)
 
-		r_ptr = r_ptr.off(int(subfr_length))
-		b_Q14_ptr = b_Q14_ptr.off(LTP_ORDER)
-		WLTP_ptr = WLTP_ptr.off(LTP_ORDER * LTP_ORDER)
+		r_ptr = r_ptr.offInto(&rView, int(subfr_length))
+		b_Q14_ptr = b_Q14_ptr.offInto(&bView, LTP_ORDER)
+		WLTP_ptr = WLTP_ptr.offInto(&WLTPView, LTP_ORDER*LTP_ORDER)
 	}
 
 	maxRshifts = 0
@@ -118,7 +121,7 @@ func find_LTP_FIX(b_Q14 *slice[int16], WLTP *slice[int32], LTPredCodGain_Q7 *int
 		for i = 0; i < LTP_ORDER; i++ {
 			*d_Q14.ptr(int(k)) += int32(b_Q14_ptr.idx(int(i)))
 		}
-		b_Q14_ptr = b_Q14_ptr.off(LTP_ORDER)
+		b_Q14_ptr = b_Q14_ptr.offInto(&bView, LTP_ORDER)
 	}
 
 	max_abs_d_Q14 = 0
@@ -167,7 +170,7 @@ func find_LTP_FIX(b_Q14 *slice[int16], WLTP *slice[int32], LTPredCodGain_Q7 *int
 			*b_Q14_ptr.ptr(int(i)) = int16(LIMIT(int32(b_Q14_ptr.idx(int(i)))+SMULWB(LSHIFT_SAT32(temp32, 4),
 				delta_b_Q14.idx(int(i))), -16000, 28000))
 		}
-		b_Q14_ptr = b_Q14_ptr.off(LTP_ORDER)
+		b_Q14_ptr = b_Q14_ptr.offInto(&bView, LTP_ORDER)
 	}
 }
 

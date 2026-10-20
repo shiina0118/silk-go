@@ -8,6 +8,7 @@ func residual_energy16_covar_FIX(c *slice[int16], wXX, wXx *slice[int32], wxx, D
 		c_max, w_max, tmp, tmp2, nrg int32
 		cn                           = alloc[int32](MAX_MATRIX_SIZE)
 		pRow                         *slice[int32]
+		pRowView                     slice[int32]
 	)
 
 	lshifts = 16 - cQ
@@ -36,7 +37,7 @@ func residual_energy16_covar_FIX(c *slice[int16], wXX, wXx *slice[int32], wxx, D
 	tmp2 = 0
 	for i = 0; i < D; i++ {
 		tmp = 0
-		pRow = wXX.off(int(i * D))
+		pRow = wXX.offInto(&pRowView, int(i*D))
 		for j = i + 1; j < D; j++ {
 			tmp = SMLAWB(tmp, pRow.idx(int(j)), cn.idx(int(j)))
 		}

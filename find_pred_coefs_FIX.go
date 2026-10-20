@@ -53,13 +53,14 @@ func find_pred_coefs_FIX(psEnc *encoder_state_FIX, psEncCtrl *encoder_control_FI
 		LTP_analysis_filter_FIX(LPC_in_pre, psEnc.x_buf.off(int(psEnc.sCmn.frame_length-psEnc.sCmn.predictLPCOrder)),
 			psEncCtrl.LTPCoef_Q14, psEncCtrl.sCmn.pitchL, invGains_Q16, psEnc.sCmn.subfr_length, psEnc.sCmn.predictLPCOrder)
 	} else {
-		x_ptr = psEnc.x_buf.off(int(psEnc.sCmn.frame_length - psEnc.sCmn.predictLPCOrder))
-		x_pre_ptr = LPC_in_pre.off(0)
+		var xView, xPreView slice[int16]
+		x_ptr = psEnc.x_buf.offInto(&xView, int(psEnc.sCmn.frame_length-psEnc.sCmn.predictLPCOrder))
+		x_pre_ptr = LPC_in_pre.offInto(&xPreView, 0)
 		for i = 0; i < NB_SUBFR; i++ {
 			scale_copy_vector16(x_pre_ptr, x_ptr, invGains_Q16.idx(int(i)),
 				psEnc.sCmn.subfr_length+psEnc.sCmn.predictLPCOrder)
-			x_pre_ptr = x_pre_ptr.off(int(psEnc.sCmn.subfr_length + psEnc.sCmn.predictLPCOrder))
-			x_ptr = x_ptr.off(int(psEnc.sCmn.subfr_length))
+			x_pre_ptr = x_pre_ptr.offInto(&xPreView, int(psEnc.sCmn.subfr_length+psEnc.sCmn.predictLPCOrder))
+			x_ptr = x_ptr.offInto(&xView, int(psEnc.sCmn.subfr_length))
 		}
 
 		memset(psEncCtrl.LTPCoef_Q14, 0, NB_SUBFR*LTP_ORDER)

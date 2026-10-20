@@ -116,14 +116,17 @@ func NSQ_del_dec(
 		LSF_interpolation_flag = 1
 	}
 
-	pxq = NSQ.xq.off(int(psEncC.frame_length))
+	// Subframe views reuse these locals instead of allocating on every step.
+	var xView, pxqView, BView, ARView slice[int16]
+	var qView slice[int8]
+	pxq = NSQ.xq.offInto(&pxqView, int(psEncC.frame_length))
 	NSQ.sLTP_shp_buf_idx = psEncC.frame_length
 	NSQ.sLTP_buf_idx = psEncC.frame_length
 	subfr = 0
 	for k = 0; k < NB_SUBFR; k++ {
 		A_Q12 = PredCoef_Q12[(k>>1)|(1-LSF_interpolation_flag)]
-		B_Q14 = LTPCoef_Q14.off(int(k * LTP_ORDER))
-		AR_shp_Q13 = AR2_Q13.off(int(k * MAX_SHAPE_LPC_ORDER))
+		B_Q14 = LTPCoef_Q14.offInto(&BView, int(k*LTP_ORDER))
+		AR_shp_Q13 = AR2_Q13.offInto(&ARView, int(k*MAX_SHAPE_LPC_ORDER))
 
 		HarmShapeFIRPacked_Q14 = RSHIFT(HarmShapeGain_Q14.idx(int(k)), 2)
 		HarmShapeFIRPacked_Q14 |= LSHIFT(RSHIFT(HarmShapeGain_Q14.idx(int(k)), 1), 16)
@@ -183,9 +186,9 @@ func NSQ_del_dec(
 			psEncC.warping_Q16, psEncC.nStatesDelayedDecision, &smpl_buf_idx, decisionDelay)
 		subfr++
 
-		x = x.off(int(psEncC.subfr_length))
-		q = q.off(int(psEncC.subfr_length))
-		pxq = pxq.off(int(psEncC.subfr_length))
+		x = x.offInto(&xView, int(psEncC.subfr_length))
+		q = q.offInto(&qView, int(psEncC.subfr_length))
+		pxq = pxq.offInto(&pxqView, int(psEncC.subfr_length))
 	}
 
 	RDmin_Q10 = psDelDec[0].RD_Q10

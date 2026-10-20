@@ -6,7 +6,8 @@ func corrVector_FIX(x, t *slice[int16], L, order int32, Xt *slice[int32], rshift
 		ptr1, ptr2 *slice[int16]
 		inner_prod int32
 	)
-	ptr1 = x.off(int(order - 1))
+	var ptr1View slice[int16]
+	ptr1 = x.offInto(&ptr1View, int(order-1))
 	ptr2 = t.off(0)
 	if rshifts > 0 {
 		for lag = 0; lag < order; lag++ {
@@ -15,12 +16,12 @@ func corrVector_FIX(x, t *slice[int16], L, order int32, Xt *slice[int32], rshift
 				inner_prod += RSHIFT32(SMULBB(int32(ptr1.idx(int(i))), int32(ptr2.idx(int(i)))), rshifts)
 			}
 			*Xt.ptr(int(lag)) = inner_prod
-			ptr1 = ptr1.off(-1)
+			ptr1 = ptr1.offInto(&ptr1View, -1)
 		}
 	} else {
 		for lag = 0; lag < order; lag++ {
 			*Xt.ptr(int(lag)) = inner_prod_aligned(ptr1, ptr2, L)
-			ptr1 = ptr1.off(-1)
+			ptr1 = ptr1.offInto(&ptr1View, -1)
 		}
 	}
 }
@@ -55,7 +56,8 @@ func corrMatrix_FIX(x *slice[int16], L int32, order int32, head_room int32, XX *
 		*matrix_ptr(XX, j, j, order) = energy
 	}
 
-	ptr2 = x.off(int(order - 2))
+	var ptr2View slice[int16]
+	ptr2 = x.offInto(&ptr2View, int(order-2))
 	if rshifts_local > 0 {
 		for lag = 1; lag < order; lag++ {
 			energy = 0
@@ -70,7 +72,7 @@ func corrMatrix_FIX(x *slice[int16], L int32, order int32, head_room int32, XX *
 				*matrix_ptr(XX, lag+j, j, order) = energy
 				*matrix_ptr(XX, j, lag+j, order) = energy
 			}
-			ptr2 = ptr2.off(-1)
+			ptr2 = ptr2.offInto(&ptr2View, -1)
 		}
 	} else {
 		for lag = 1; lag < order; lag++ {
@@ -83,7 +85,7 @@ func corrMatrix_FIX(x *slice[int16], L int32, order int32, head_room int32, XX *
 				*matrix_ptr(XX, lag+j, j, order) = energy
 				*matrix_ptr(XX, j, lag+j, order) = energy
 			}
-			ptr2 = ptr2.off(-1)
+			ptr2 = ptr2.offInto(&ptr2View, -1)
 		}
 	}
 	*rshifts = rshifts_local

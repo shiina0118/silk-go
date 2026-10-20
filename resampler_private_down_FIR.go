@@ -75,6 +75,7 @@ func resampler_private_down_FIR(S *resampler_state_struct, out, in *slice[int16]
 		buf1                                           = alloc[int16](RESAMPLER_MAX_BATCH_SIZE_IN / 2)
 		buf2                                           = alloc[int32](RESAMPLER_MAX_BATCH_SIZE_IN + RESAMPLER_DOWN_ORDER_FIR)
 		FIR_Coefs                                      *slice[int16]
+		inView                                         slice[int16]
 	)
 
 	S.sFIR.copy(buf2, RESAMPLER_DOWN_ORDER_FIR)
@@ -103,7 +104,7 @@ func resampler_private_down_FIR(S *resampler_state_struct, out, in *slice[int16]
 			out = resampler_private_down_FIR_INTERPOL1(out, buf2, FIR_Coefs, max_index_Q16, index_increment_Q16, S.FIR_Fracs)
 		}
 
-		in = in.off(int(nSamplesIn << S.input2x))
+		in = in.offInto(&inView, int(nSamplesIn<<S.input2x))
 		inLen -= nSamplesIn << S.input2x
 
 		if inLen > S.input2x {

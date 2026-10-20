@@ -16,6 +16,7 @@ func residual_energy_FIX(
 		tmp32                          int32
 	)
 
+	var resView, xView slice[int16]
 	x_ptr = x
 	offset = LPC_order + subfr_length
 
@@ -23,15 +24,15 @@ func residual_energy_FIX(
 		memset(S, 0, int(LPC_order))
 		LPC_analysis_filter(x_ptr, a_Q12[i], S, LPC_res, (NB_SUBFR>>1)*offset, LPC_order)
 
-		LPC_res_ptr = LPC_res.off(int(LPC_order))
+		LPC_res_ptr = LPC_res.offInto(&resView, int(LPC_order))
 		for j = 0; j < (NB_SUBFR >> 1); j++ {
 			sum_sqr_shift(nrgs.ptr(int(i*(NB_SUBFR>>1)+j)), &rshift, LPC_res_ptr, subfr_length)
 
 			*nrgsQ.ptr(int(i*(NB_SUBFR>>1) + j)) = -rshift
 
-			LPC_res_ptr = LPC_res_ptr.off(int(offset))
+			LPC_res_ptr = LPC_res_ptr.offInto(&resView, int(offset))
 		}
-		x_ptr = x_ptr.off(int((NB_SUBFR >> 1) * offset))
+		x_ptr = x_ptr.offInto(&xView, int((NB_SUBFR>>1)*offset))
 	}
 
 	for i = 0; i < NB_SUBFR; i++ {

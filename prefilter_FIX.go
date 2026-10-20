@@ -40,6 +40,7 @@ func prefilter_FIX(psEnc *encoder_state_FIX, psEncCtrl *encoder_control_FIX, xw,
 		B_Q12                              int32
 	)
 
+	var ARView, pxView, pxwView slice[int16]
 	px = x
 	pxw = xw
 	lag = P.lagPrev
@@ -53,7 +54,7 @@ func prefilter_FIX(psEnc *encoder_state_FIX, psEncCtrl *encoder_control_FIX, xw,
 		HarmShapeFIRPacked_Q12 |= LSHIFT(RSHIFT(HarmShapeGain_Q12, 1), 16)
 		Tilt_Q14 = psEncCtrl.Tilt_Q14.idx(int(k))
 		LF_shp_Q14 = psEncCtrl.LF_shp_Q14.idx(int(k))
-		AR1_shp_Q13 = psEncCtrl.AR1_Q13.off(int(k * MAX_SHAPE_LPC_ORDER))
+		AR1_shp_Q13 = psEncCtrl.AR1_Q13.offInto(&ARView, int(k*MAX_SHAPE_LPC_ORDER))
 
 		warped_LPC_analysis_filter_FIX(P.sAR_shp, st_res, AR1_shp_Q13, px,
 			int16(psEnc.sCmn.warping_Q16), psEnc.sCmn.subfr_length, psEnc.sCmn.shapingLPCOrder)
@@ -75,8 +76,8 @@ func prefilter_FIX(psEnc *encoder_state_FIX, psEncCtrl *encoder_control_FIX, xw,
 		prefilt_FIX(P, x_filt_Q12, pxw, HarmShapeFIRPacked_Q12, Tilt_Q14,
 			LF_shp_Q14, lag, psEnc.sCmn.subfr_length)
 
-		px = px.off(int(psEnc.sCmn.subfr_length))
-		pxw = pxw.off(int(psEnc.sCmn.subfr_length))
+		px = px.offInto(&pxView, int(psEnc.sCmn.subfr_length))
+		pxw = pxw.offInto(&pxwView, int(psEnc.sCmn.subfr_length))
 	}
 
 	P.lagPrev = psEncCtrl.sCmn.pitchL.idx(NB_SUBFR - 1)
